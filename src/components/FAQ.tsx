@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     q: "When does PromptGuard launch?",
-    a: "Soon. Join the waitlist above to be notified first.",
+    a: "It is available right now! You can use the interactive demo above to test your prompts immediately.",
   },
 ];
 

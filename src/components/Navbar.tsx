@@ -49,10 +49,10 @@ export const Navbar = () => {
 
       {/* CTA */}
       <a
-        href="#waitlist"
+        href="#demo"
         className="font-ui text-xs uppercase tracking-wide font-medium bg-foreground text-primary-foreground rounded-full px-6 py-2.5 transition-all duration-200 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:-translate-y-0.5"
       >
-        Join Waitlist
+        Try Demo
       </a>
     </motion.nav>
   );

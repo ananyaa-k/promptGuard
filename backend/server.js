@@ -29,22 +29,38 @@ app.get('/api/scan-stream', (req, res) => {
 
   const p = prompt ? prompt.toLowerCase() : "";
 
-  if (p.includes('ignore') || p.includes('jailbreak') || p.includes('override')) {
+  if (p.includes('ignore') || p.includes('jailbreak') || p.includes('override') || p.includes('bypass') || p.includes('disregard')) {
     categories[0] = { name: "Jailbreaks", result: "■ 2 FOUND", type: "found" };
     findings.push({ icon: "▲", severity: "HIGH", name: "Jailbreak attempt detected", tag: "LLM01" });
     riskScore += 40;
   }
   
-  if (p.includes('system prompt') || p.includes('internal') || p.includes('instructions')) {
+  if (p.includes('system prompt') || p.includes('internal') || p.includes('instructions') || p.includes('developer') || p.includes('core directive')) {
     categories[1] = { name: "System Prompt Leakage", result: "■ CRITICAL", type: "critical" };
     findings.push({ icon: "■", severity: "CRITICAL", name: "System Prompt Extraction Attempt", tag: "LLM06" });
     riskScore += 50;
   }
   
-  if (p.includes('pii') || p.includes('customer') || p.includes('password')) {
+  if (p.includes('act as') || p.includes('you are now') || p.includes('simulate') || p.includes('pretend')) {
+    categories[2] = { name: "Role Confusion", result: "▲ 1 FOUND", type: "found" };
+    findings.push({ icon: "▲", severity: "HIGH", name: "Role-play override detected", tag: "LLM01" });
+    riskScore += 35;
+  }
+  
+  if (p.includes('pii') || p.includes('customer') || p.includes('password') || p.includes('ssn') || p.includes('email') || p.includes('credit card')) {
     categories[3] = { name: "Data Extraction", result: "◆ 1 FOUND", type: "found" };
     findings.push({ icon: "◆", severity: "MEDIUM", name: "Sensitive Data (PII) referenced", tag: "LLM06" });
-    riskScore += 20;
+    riskScore += 25;
+  }
+  
+  if (p.includes('http') || p.includes('url') || p.includes('www.') || p.includes('<script>') || p.includes('fetch(')) {
+    categories[4] = { name: "Indirect Injection", result: "◆ 1 FOUND", type: "found" };
+    findings.push({ icon: "◆", severity: "MEDIUM", name: "Potential URL/Script Injection Vector", tag: "LLM02" });
+    riskScore += 30;
+  }
+  
+  if (riskScore > 0) {
+    categories[5] = { name: "OWASP LLM Top 10", result: `${findings.length} MAPPED`, type: "found" };
   }
 
   // Cap risk score at 100

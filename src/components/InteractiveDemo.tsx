@@ -224,7 +224,7 @@ export const InteractiveDemo = () => {
   };
 
   return (
-    <section className="py-28 px-6">
+    <section id="demo" className="py-28 px-6">
       <div className="max-w-[900px] mx-auto">
         <motion.div
           initial="hidden"
@@ -330,21 +330,6 @@ export const InteractiveDemo = () => {
                 )}
               </AnimatePresence>
             </div>
-          </motion.div>
-
-          <motion.div
-            variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
-            className="text-center mt-8"
-          >
-            <span className="font-body text-sm text-foreground/40">
-              Want full analysis with remediation steps?{" "}
-              <a
-                href="#waitlist"
-                className="text-foreground underline hover:no-underline transition-all"
-              >
-                Join the waitlist above
-              </a>
-            </span>
           </motion.div>
         </motion.div>
       </div>
