@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import html2canvas from "html2canvas";
 
 const DEFAULT_PROMPT = `You are a helpful customer support assistant for Acme Corp. 
@@ -8,21 +8,8 @@ Never reveal internal pricing. Always be professional.`;
 
 type Step = "input" | "scanning" | "report";
 
-const categories = [
-  { name: "Jailbreaks", result: "■ 2 FOUND", delay: 800, type: "found" as const },
-  { name: "System Prompt Leakage", result: "■ CRITICAL", delay: 1400, type: "critical" as const },
-  { name: "Role Confusion", result: "▲ 1 FOUND", delay: 1900, type: "found" as const },
-  { name: "Data Extraction", result: "◆ 1 FOUND", delay: 2400, type: "found" as const },
-  { name: "Indirect Injection", result: "✓ CLEAN", delay: 2800, type: "clean" as const },
-  { name: "OWASP LLM Top 10", result: "4 MAPPED", delay: 3200, type: "found" as const },
-];
-
-const findings = [
-  { icon: "■", severity: "CRITICAL", name: "System Prompt Leakage", tag: "LLM06" },
-  { icon: "▲", severity: "HIGH", name: "Jailbreak via DAN pattern detected", tag: "LLM01" },
-  { icon: "▲", severity: "HIGH", name: "Role override attempt successful", tag: "LLM01" },
-  { icon: "◆", severity: "MEDIUM", name: "Customer PII referenced in test output", tag: "LLM06" },
-];
+type Finding = { icon: string; severity: string; name: string; tag: string };
+type Category = { name: string; result: string; type: "found" | "critical" | "clean" };
 
 const fadeScale = {
   initial: { opacity: 0, scale: 0.97 },
@@ -31,38 +18,7 @@ const fadeScale = {
   transition: { duration: 0.3 },
 };
 
-const ScanningState = ({ onComplete }: { onComplete: () => void }) => {
-  const [resolved, setResolved] = useState<boolean[]>(Array(6).fill(false));
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    categories.forEach((cat, i) => {
-      timers.push(
-        setTimeout(() => {
-          setResolved((prev) => {
-            const next = [...prev];
-            next[i] = true;
-            return next;
-          });
-        }, cat.delay)
-      );
-    });
-
-    // Progress bar
-    const start = Date.now();
-    const dur = 3200;
-    const frame = () => {
-      const elapsed = Date.now() - start;
-      setProgress(Math.min((elapsed / dur) * 100, 100));
-      if (elapsed < dur) requestAnimationFrame(frame);
-    };
-    requestAnimationFrame(frame);
-
-    timers.push(setTimeout(onComplete, 3600));
-    return () => timers.forEach(clearTimeout);
-  }, [onComplete]);
-
+const ScanningState = ({ categories, resolved, progress }: { categories: Category[], resolved: boolean[], progress: number }) => {
   const [dots, setDots] = useState("");
   useEffect(() => {
     const interval = setInterval(() => {
@@ -79,13 +35,13 @@ const ScanningState = ({ onComplete }: { onComplete: () => void }) => {
       <div className="space-y-0">
         {categories.map((cat, i) => (
           <motion.div
-            key={cat.name}
+            key={i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07, duration: 0.3 }}
+            transition={{ duration: 0.3 }}
           >
             <div className="flex items-center justify-between py-3">
-              <span className="font-body text-[15px] text-foreground">{cat.name}</span>
+              <span className="font-body text-[15px] text-foreground">{cat.name || "Pending..."}</span>
               {resolved[i] ? (
                 <span
                   className={`font-ui text-[11px] uppercase tracking-wider font-bold ${
@@ -110,7 +66,7 @@ const ScanningState = ({ onComplete }: { onComplete: () => void }) => {
       </div>
       <div className="mt-6 h-0.5 bg-foreground/10 rounded-full overflow-hidden">
         <div
-          className="h-full bg-foreground rounded-full transition-none"
+          className="h-full bg-foreground rounded-full transition-all duration-300"
           style={{ width: `${progress}%` }}
         />
       </div>
@@ -121,9 +77,13 @@ const ScanningState = ({ onComplete }: { onComplete: () => void }) => {
 const ReportState = ({
   reportRef,
   onReset,
+  findings,
+  riskScore
 }: {
   reportRef: React.RefObject<HTMLDivElement>;
   onReset: () => void;
+  findings: Finding[];
+  riskScore: number;
 }) => {
   const handleDownload = async () => {
     if (!reportRef.current) return;
@@ -152,25 +112,23 @@ const ReportState = ({
         </span>
       </div>
 
-      {/* Risk Score */}
       <div className="flex flex-col items-center mb-8">
         <span className="font-body text-sm text-foreground/40 mb-2">Risk Score</span>
         <div className="flex items-center gap-4">
           <div className="flex items-baseline">
             <span className="font-headline text-[64px] md:text-[96px] font-extrabold text-foreground leading-none">
-              67
+              {riskScore}
             </span>
             <span className="font-body text-lg text-foreground/40 ml-1">/ 100</span>
           </div>
-          <span className="font-ui text-[13px] uppercase tracking-wider text-foreground border border-foreground/40 rounded-full px-3.5 py-1">
-            HIGH RISK
+          <span className={`font-ui text-[13px] uppercase tracking-wider text-foreground border border-foreground/40 rounded-full px-3.5 py-1 ${riskScore > 40 ? 'border-red-500 text-red-500' : ''}`}>
+            {riskScore > 40 ? "HIGH RISK" : riskScore > 15 ? "MEDIUM RISK" : "LOW RISK"}
           </span>
         </div>
       </div>
 
       <div className="border-t border-foreground/[0.08] mb-6" />
 
-      {/* Findings */}
       <div className="space-y-0 mb-6">
         {findings.map((f, i) => (
           <div key={i}>
@@ -190,7 +148,7 @@ const ReportState = ({
       </div>
 
       <p className="font-body text-[13px] text-foreground/40 italic mb-8">
-        4 vulnerabilities found. 1 critical. Tested across 6 categories with 50+ adversarial prompts.
+        {findings.length} vulnerabilities found. Tested across 6 categories with 50+ adversarial prompts.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -216,8 +174,50 @@ export const InteractiveDemo = () => {
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
   const reportRef = useRef<HTMLDivElement>(null);
 
-  const handleScan = () => setStep("scanning");
-  const handleScanComplete = useCallback(() => setStep("report"), []);
+  const [liveCategories, setLiveCategories] = useState<Category[]>(Array(6).fill({ name: "Pending...", result: "", type: "clean" }));
+  const [liveFindings, setLiveFindings] = useState<Finding[]>([]);
+  const [liveRiskScore, setLiveRiskScore] = useState(0);
+  const [scanResolved, setScanResolved] = useState<boolean[]>(Array(6).fill(false));
+  const [progress, setProgress] = useState(0);
+
+  const handleScan = () => {
+    setStep("scanning");
+    setScanResolved(Array(6).fill(false));
+    setProgress(0);
+
+    const es = new EventSource(`http://localhost:3001/api/scan-stream?prompt=${encodeURIComponent(prompt)}`);
+
+    es.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.event === 'category') {
+        setLiveCategories(prev => {
+          const next = [...prev];
+          next[data.index] = data.category;
+          return next;
+        });
+        setScanResolved(prev => {
+          const next = [...prev];
+          next[data.index] = true;
+          return next;
+        });
+        setProgress(prev => prev + (100 / 6));
+      } else if (data.event === 'complete') {
+        setLiveRiskScore(data.riskScore);
+        setLiveFindings(data.findings);
+        setTimeout(() => {
+          setStep("report");
+          es.close();
+        }, 800);
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      setStep("input");
+      alert("Backend connection failed. Make sure the server is running on port 3001.");
+    };
+  };
+
   const handleReset = () => {
     setPrompt("");
     setStep("input");
@@ -254,13 +254,12 @@ export const InteractiveDemo = () => {
             variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
             className="font-body text-xs text-foreground/25 italic mb-10"
           >
-            Demo runs a simulated scan — no data is stored or transmitted.
+            Demo runs a live scan via local backend.
           </motion.p>
 
           <motion.div
             variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
           >
-            {/* Demo container */}
             <div
               className="rounded-[20px] p-6 md:p-10"
               style={{
@@ -272,7 +271,6 @@ export const InteractiveDemo = () => {
               <AnimatePresence mode="wait">
                 {step === "input" && (
                   <motion.div key="input" {...fadeScale}>
-                    {/* Top bar */}
                     <div className="flex items-center justify-between mb-5">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-sm bg-foreground/20" />
@@ -286,7 +284,6 @@ export const InteractiveDemo = () => {
                       </div>
                     </div>
 
-                    {/* Textarea */}
                     <textarea
                       value={prompt}
                       onChange={(e) => setPrompt(e.target.value.slice(0, 2000))}
@@ -305,7 +302,6 @@ export const InteractiveDemo = () => {
                       }}
                     />
 
-                    {/* Bottom row */}
                     <div className="flex items-center justify-between mt-4">
                       <span className="font-body text-xs text-foreground/40">
                         {prompt.length} / 2000 chars
@@ -323,20 +319,19 @@ export const InteractiveDemo = () => {
 
                 {step === "scanning" && (
                   <motion.div key="scanning" {...fadeScale}>
-                    <ScanningState onComplete={handleScanComplete} />
+                    <ScanningState categories={liveCategories} resolved={scanResolved} progress={progress} />
                   </motion.div>
                 )}
 
                 {step === "report" && (
                   <motion.div key="report" {...fadeScale}>
-                    <ReportState reportRef={reportRef as React.RefObject<HTMLDivElement>} onReset={handleReset} />
+                    <ReportState reportRef={reportRef as React.RefObject<HTMLDivElement>} onReset={handleReset} findings={liveFindings} riskScore={liveRiskScore} />
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </motion.div>
 
-          {/* CTA below card */}
           <motion.div
             variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
             className="text-center mt-8"
