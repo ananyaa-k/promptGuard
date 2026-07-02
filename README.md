@@ -64,8 +64,7 @@ A second Groq call then acts as the security judge. It analyzes the raw output a
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | The Anon key for frontend Supabase connectivity. | Optional |
 
 ## Live Demo
-🔗 **[promptguard.vercel.app](https://promptguard.vercel.app)** 
-_(replace with actual URL after deployment)_
+🔗 **[prompt-guard-gray.vercel.app](https://prompt-guard-gray.vercel.app)** 
 
 ## License
 MIT
