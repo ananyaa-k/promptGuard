@@ -1,14 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useRef, useEffect } from "react";
-import html2canvas from "html2canvas";
+import { useState, useEffect } from "react";
 
 const DEFAULT_PROMPT = `You are a helpful customer support assistant for Acme Corp. 
 You have access to order history and customer PII. 
 Never reveal internal pricing. Always be professional.`;
 
 type Step = "input" | "scanning" | "report";
-
-type Finding = { icon: string; severity: string; name: string; tag: string };
 type Category = { name: string; result: string; type: "found" | "critical" | "clean" };
 
 const fadeScale = {
@@ -75,45 +72,38 @@ const ScanningState = ({ categories, resolved, progress }: { categories: Categor
 };
 
 const ReportState = ({
-  reportRef,
   onReset,
-  findings,
-  riskScore
+  report
 }: {
-  reportRef: React.RefObject<HTMLDivElement>;
   onReset: () => void;
-  findings: Finding[];
-  riskScore: number;
+  report: any;
 }) => {
-  const handleDownload = async () => {
-    if (!reportRef.current) return;
-    try {
-      const canvas = await html2canvas(reportRef.current, {
-        backgroundColor: "#0A0A0A",
-        scale: 2,
-      });
-      const link = document.createElement("a");
-      link.download = "promptguard-report.png";
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-    } catch (e) {
-      console.error("Screenshot failed", e);
-    }
+  const riskScore = report?.summary_stats?.risk_score || 0;
+  const results = report?.results || [];
+
+  const handleDownload = () => {
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `promptguard-report-${report?.scan_id || 'unknown'}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div ref={reportRef}>
+    <div>
       <div className="flex items-center justify-between mb-8">
         <span className="font-ui text-[11px] uppercase tracking-[0.2em] text-foreground/40">
           SCAN COMPLETE
         </span>
         <span className="font-ui text-[11px] uppercase tracking-[0.2em] text-foreground/40">
-          just now
+          {report?.timestamp ? new Date(report.timestamp).toLocaleTimeString() : "just now"}
         </span>
       </div>
 
       <div className="flex flex-col items-center mb-8">
-        <span className="font-body text-sm text-foreground/40 mb-2">Risk Score</span>
+        <span className="font-body text-sm text-foreground/40 mb-2">Overall Risk Score</span>
         <div className="flex items-center gap-4">
           <div className="flex items-baseline">
             <span className="font-headline text-[64px] md:text-[96px] font-extrabold text-foreground leading-none">
@@ -129,26 +119,53 @@ const ReportState = ({
 
       <div className="border-t border-foreground/[0.08] mb-6" />
 
-      <div className="space-y-0 mb-6">
-        {findings.map((f, i) => (
-          <div key={i}>
-            <div className="flex items-center gap-3 py-3">
-              <span className="text-foreground text-sm">{f.icon}</span>
-              <span className="font-ui text-[11px] uppercase tracking-wider text-foreground font-bold w-20 flex-shrink-0">
-                {f.severity}
-              </span>
-              <span className="font-body text-sm text-foreground flex-1">{f.name}</span>
-              <span className="font-mono text-xs text-foreground/40">{f.tag}</span>
-            </div>
-            {i < findings.length - 1 && (
-              <div className="border-b border-foreground/[0.06]" />
-            )}
-          </div>
-        ))}
+      {/* Results Table */}
+      <div className="overflow-x-auto mb-8 rounded-xl border border-foreground/[0.08] bg-foreground/[0.02]">
+        <table className="w-full text-left border-collapse min-w-[600px]">
+          <thead>
+            <tr className="border-b border-foreground/[0.08] bg-foreground/[0.03]">
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold">Attack Name</th>
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold">Category</th>
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold">Severity</th>
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold text-center">Result</th>
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold text-center">Confidence</th>
+              <th className="p-3 font-ui text-[11px] uppercase tracking-wider text-foreground/50 font-semibold">Evaluator Reason</th>
+            </tr>
+          </thead>
+          <tbody>
+            {results.map((res: any, i: number) => {
+              const meta = res.metadata || {};
+              const score = res.scoring || {};
+              const isSuccess = score.success;
+              const severity = score.severity_override && score.severity_override !== "none" ? score.severity_override : meta.severity;
+              
+              return (
+                <tr key={i} className="border-b border-foreground/[0.04] hover:bg-foreground/[0.02] transition-colors">
+                  <td className="p-3 font-body text-sm text-foreground align-top whitespace-nowrap">{meta.attack_id || "Unknown"}</td>
+                  <td className="p-3 font-body text-sm text-foreground/70 align-top">{meta.category || "Unknown"}</td>
+                  <td className="p-3 font-ui text-xs uppercase tracking-wider align-top">
+                    <span className={`font-bold ${severity === 'high' ? 'text-red-400' : severity === 'medium' ? 'text-yellow-400' : 'text-green-400'}`}>
+                      {severity || "NONE"}
+                    </span>
+                  </td>
+                  <td className="p-3 font-body text-lg text-center align-top" title={isSuccess ? "Attack Succeeded (Vulnerable)" : "Attack Failed (Safe)"}>
+                    {isSuccess ? "❌" : "✅"}
+                  </td>
+                  <td className="p-3 font-body text-sm text-center align-top">
+                    {(score.confidence * 100).toFixed(0)}%
+                  </td>
+                  <td className="p-3 font-body text-sm text-foreground/70 align-top max-w-[300px]">
+                    {score.reason || "-"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <p className="font-body text-[13px] text-foreground/40 italic mb-8">
-        {findings.length} vulnerabilities found. Tested across 6 categories with 50+ adversarial prompts.
+        Tested {results.length} adversarial prompts. ✅ indicates the attack was safely blocked. ❌ indicates the attack succeeded (vulnerability found).
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -156,13 +173,13 @@ const ReportState = ({
           onClick={handleDownload}
           className="border border-foreground/20 rounded-lg px-5 py-2.5 font-body text-sm text-foreground hover:border-foreground/40 transition-colors"
         >
-          Download Report →
+          Download Report (JSON)
         </button>
         <button
           onClick={onReset}
-          className="border border-foreground/20 rounded-lg px-5 py-2.5 font-body text-sm text-foreground hover:border-foreground/40 transition-colors"
+          className="bg-foreground text-primary-foreground rounded-lg px-5 py-2.5 font-body text-sm hover:-translate-y-0.5 transition-transform"
         >
-          Scan Another →
+          Scan Another Prompt →
         </button>
       </div>
     </div>
@@ -172,60 +189,74 @@ const ReportState = ({
 export const InteractiveDemo = () => {
   const [step, setStep] = useState<Step>("input");
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
-  const reportRef = useRef<HTMLDivElement>(null);
 
-  const [liveCategories, setLiveCategories] = useState<Category[]>(Array(6).fill({ name: "Pending...", result: "", type: "clean" }));
-  const [liveFindings, setLiveFindings] = useState<Finding[]>([]);
-  const [liveRiskScore, setLiveRiskScore] = useState(0);
-  const [scanResolved, setScanResolved] = useState<boolean[]>(Array(6).fill(false));
+  const [fastMode, setFastMode] = useState(true);
+  const totalVectors = fastMode ? 5 : 20;
+
+  const [liveCategories, setLiveCategories] = useState<Category[]>(Array(5).fill({ name: "Waiting...", result: "", type: "clean" }));
+  const [scanResolved, setScanResolved] = useState<boolean[]>(Array(5).fill(false));
   const [progress, setProgress] = useState(0);
+  const [fullReport, setFullReport] = useState<any>(null);
 
-  const handleScan = () => {
+  const handleScan = async () => {
     setStep("scanning");
-    setScanResolved(Array(6).fill(false));
+    setLiveCategories(Array(totalVectors).fill({ name: "Waiting...", result: "", type: "clean" }));
+    setScanResolved(Array(totalVectors).fill(false));
     setProgress(0);
 
-    const es = new EventSource(`http://localhost:3001/api/scan-stream?prompt=${encodeURIComponent(prompt)}`);
-
-    es.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.event === 'category') {
+    let currentIdx = 0;
+    const progressInterval = setInterval(() => {
+      if (currentIdx < totalVectors - 1) {
         setLiveCategories(prev => {
           const next = [...prev];
-          next[data.index] = data.category;
+          next[currentIdx] = { name: "Executing attack payloads...", result: "", type: "clean" };
           return next;
         });
         setScanResolved(prev => {
           const next = [...prev];
-          next[data.index] = true;
+          next[currentIdx] = true;
           return next;
         });
-        setProgress(prev => prev + (100 / 6));
-      } else if (data.event === 'complete') {
-        setLiveRiskScore(data.riskScore);
-        setLiveFindings(data.findings);
-        setTimeout(() => {
-          setStep("report");
-          es.close();
-        }, 800);
+        setProgress(prev => prev + (100 / totalVectors));
+        currentIdx++;
       }
-    };
+    }, 2000);
 
-    es.onerror = () => {
-      es.close();
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const res = await fetch(`${apiUrl}/api/run-scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ system_prompt: prompt, fast_mode: fastMode })
+      });
+      
+      const data = await res.json();
+      clearInterval(progressInterval);
+      setProgress(100);
+      setScanResolved(Array(totalVectors).fill(true));
+      
+      setFullReport(data);
+      
+      setTimeout(() => {
+        setStep("report");
+      }, 800);
+      
+    } catch (e) {
+      clearInterval(progressInterval);
       setStep("input");
-      alert("Backend connection failed. Make sure the server is running on port 3001.");
-    };
+      alert("Backend connection failed. Make sure the server is running on port 8000.");
+    }
   };
 
   const handleReset = () => {
     setPrompt("");
     setStep("input");
+    setFullReport(null);
   };
 
   return (
     <section id="demo" className="py-28 px-6">
-      <div className="max-w-[900px] mx-auto">
+      <div className="max-w-[1000px] mx-auto">
         <motion.div
           initial="hidden"
           whileInView="show"
@@ -248,7 +279,7 @@ export const InteractiveDemo = () => {
             variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
             className="font-body text-[17px] text-foreground/50 max-w-[600px] leading-[1.7] mb-2"
           >
-            Paste any AI system prompt below. Watch PromptGuard scan it across 6 attack categories and generate a live vulnerability report.
+            Paste any AI system prompt below. Watch PromptGuard scan it with adversarial attacks and generate a live vulnerability report.
           </motion.p>
           <motion.p
             variants={{ hidden: { opacity: 0, y: 60 }, show: { opacity: 1, y: 0, transition: { duration: 0.6 } } }}
@@ -303,9 +334,21 @@ export const InteractiveDemo = () => {
                     />
 
                     <div className="flex items-center justify-between mt-4">
-                      <span className="font-body text-xs text-foreground/40">
-                        {prompt.length} / 2000 chars
-                      </span>
+                      <div className="flex flex-col gap-3">
+                        <span className="font-body text-xs text-foreground/40">
+                          {prompt.length} / 2000 chars
+                        </span>
+                        <div className="flex items-center gap-4">
+                           <label className="flex items-center gap-1.5 font-ui text-xs text-foreground/80 cursor-pointer">
+                             <input type="radio" checked={fastMode} onChange={() => setFastMode(true)} className="accent-foreground" />
+                             Quick Scan (5 vectors)
+                           </label>
+                           <label className="flex items-center gap-1.5 font-ui text-xs text-foreground/80 cursor-pointer">
+                             <input type="radio" checked={!fastMode} onChange={() => setFastMode(false)} className="accent-foreground" />
+                             Full Scan (20 vectors)
+                           </label>
+                        </div>
+                      </div>
                       <button
                         onClick={handleScan}
                         disabled={!prompt.trim()}
@@ -325,7 +368,7 @@ export const InteractiveDemo = () => {
 
                 {step === "report" && (
                   <motion.div key="report" {...fadeScale}>
-                    <ReportState reportRef={reportRef as React.RefObject<HTMLDivElement>} onReset={handleReset} findings={liveFindings} riskScore={liveRiskScore} />
+                    <ReportState onReset={handleReset} report={fullReport} />
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -25,17 +25,24 @@ export const WaitlistSection = () => {
     if (!email.trim()) return;
     setStatus("loading");
 
-    const { error } = await supabase.from("waitlist").insert({ email: email.trim().toLowerCase() });
-
-    if (error) {
-      if (error.code === "23505") {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const res = await fetch(`${apiUrl}/api/waitlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() })
+      });
+      
+      if (res.status === 409) {
         setStatus("duplicate");
-      } else {
+      } else if (!res.ok) {
         setStatus("error");
+      } else {
+        setStatus("success");
+        setCount((c) => (c !== null ? c + 1 : 1));
       }
-    } else {
-      setStatus("success");
-      setCount((c) => (c !== null ? c + 1 : 1));
+    } catch (error) {
+      setStatus("error");
     }
   };
 
